@@ -1,8 +1,8 @@
 package controllers
 
 import (
-	"Go-iris-boilerplate/models"
-	"Go-iris-boilerplate/utils"
+	"go-iris-boilerplate/models"
+	"go-iris-boilerplate/utils"
 
 	"github.com/kataras/iris"
 )

@@ -1,9 +1,9 @@
 package controllers
 
 import (
-	"Go-iris-boilerplate/models"
-	"Go-iris-boilerplate/utils"
 	"fmt"
+	"go-iris-boilerplate/models"
+	"go-iris-boilerplate/utils"
 
 	"github.com/kataras/iris"
 	"gopkg.in/go-playground/validator.v9"

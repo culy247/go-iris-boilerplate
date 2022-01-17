@@ -1,8 +1,8 @@
 package models
 
 import (
-	"Go-iris-boilerplate/database"
 	"fmt"
+	"go-iris-boilerplate/database"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"

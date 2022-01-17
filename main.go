@@ -1,54 +1,56 @@
 package main
 
 import (
-	"Go-iris-boilerplate/config"
-	"Go-iris-boilerplate/controllers"
-	"Go-iris-boilerplate/database"
-	"Go-iris-boilerplate/models"
 	"fmt"
+	"go-iris-boilerplate/config"
+	"go-iris-boilerplate/controllers"
+	"go-iris-boilerplate/database"
+	"go-iris-boilerplate/models"
 	"os"
+	"time"
 
-	"github.com/dgrijalva/jwt-go"
-	jwtmiddleware "github.com/iris-contrib/middleware/jwt"
 	"github.com/kataras/iris"
 	"github.com/kataras/iris/core/router"
+
+	"github.com/kataras/iris/middleware/jwt"
 	"github.com/kataras/iris/middleware/logger"
 	"github.com/kataras/iris/middleware/recover"
 )
+
+const (
+	accessTokenMaxAge  = 10 * time.Minute
+	refreshTokenMaxAge = time.Hour
+	secretKey = "secret"
+)
+
+var (
+	signer   := NewSigner(HS256, secretKey, accessTokenMaxAge)
+	verifier := NewVerifier(HS256, secretKey)
+)
+
+// UserClaims a custom access claims structure.
+type UserClaims struct {
+	ID string `json:"user_id"`
+}
 
 func newApp() (app *iris.Application) {
 	app = iris.New()
 	app.Use(recover.New())
 	app.Use(logger.New())
-	jwtHandler := jwtmiddleware.New(jwtmiddleware.Config{
-		ValidationKeyGetter: func(token *jwt.Token) (interface{}, error) {
-			return []byte("secret"), nil
-		},
-		// When set, the middleware verifies that tokens are signed with the specific signing algorithm
-		// If the signing method is not constant the ValidationKeyGetter callback can be used to implement additional checks
-		// Important to avoid security issues described here: https://auth0.com/blog/2015/03/31/critical-vulnerabilities-in-json-web-token-libraries/
-		SigningMethod: jwt.SigningMethodHS256,
-	})
 
-	// app.Logger().SetLevel("debug")
-
-	// app.Use(logger.New())
-
-	// app.OnErrorCode(iris.StatusNotFound, func(ctx iris.Context) {
-	// 	ctx.JSON(controllers.ApiResource(false, nil, "404 Not Found"))
-	// })
 	app.OnErrorCode(iris.StatusInternalServerError, func(ctx iris.Context) {
 		ctx.WriteString("Oups something went wrong, try again")
-
 	})
+
 	database.DB.AutoMigrate(
-		&models.User{},
-		&models.RequestToken{},
+		&models.User{}
 	)
 
 	iris.RegisterOnInterrupt(func() {
 		database.DB.Close()
 	})
+
+	app.OnErrorCode(iris.StatusUnauthorized, handleUnauthorized)
 
 	auth := app.Party("/auth").AllowMethods(iris.MethodOptions)
 	{
@@ -58,11 +60,18 @@ func newApp() (app *iris.Application) {
 		auth.Post("/forgot-password", controllers.ForgotPassword)
 		auth.Post("/reset-password", controllers.ResetPassword)
 		// auth.Get("/email", controllers.Email)
+		app.Get("/authenticate", generateTokenPair)
+		app.Get("/refresh", refreshToken)
 	}
 
 	v1 := app.Party("/v1").AllowMethods(iris.MethodOptions)
 	{
-		v1.Use(jwtHandler.Serve)
+		verifyMiddleware := verifier.Verify(func() interface{} {
+			return new(UserClaims)
+		})
+
+		v1.Use(verifyMiddleware)
+
 		v1.PartyFunc("/users", func(users router.Party) {
 			users.Get("/{id:uint}", controllers.GetUser)
 			users.Get("/", controllers.GetAllUsers)
